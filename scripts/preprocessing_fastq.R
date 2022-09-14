@@ -1,6 +1,7 @@
 ## This script contains the pre-processing and counting fastq files of RNA and ATAC multiomic data
 ## of cell cultures treated or not with IFN and/or polyI:C
 
+## dependencies
 library(tidyverse)
 
 ##-----------------------
@@ -29,11 +30,140 @@ rna_meta <- mutate(rna_meta, fastq_path=paste0(path2rna,
                                                        gsub('_R.*', '', FASTQ_FILE), '/fastq/',
                                                        FASTQ_FILE)) 
 
+## checking lane number order
+lane_numbers <- gsub('.*-LR-|_R[12].*',  '', rna_meta$FASTQ_FILE) %>% as.factor() %>% as.integer()
+all(rna_meta$LANE_NO==lane_numbers)
+
+
+
+##------------------
+## Saving renamed fastq files
+write_tsv(rna_meta, file = '/media/sds-hd/sd21e005/binder_multiome/multiome_ifn_project/data/rna_renamed_fastq.tsv')
+
+##------------------
 ## Creating hard links
+
 for (i in 1:nrow(rna_meta)) { 
         command <- paste0('ln ', rna_meta$fastq_path[i], ' ', rna_meta$fastq_path_renamed[i]) 
         cat('Executing', command, '\n')
         system(command)
 }
+
+
+##----------------------
+## Preprocessing ATAC Seq data
+
+## Reading ATAC Seq data
+path2atac <- '/media/sds-hd/sd21e005/binder_multiome/data/data/220805_A00382_0466_AHFCYTDMXY/'
+atac.fastq.files <- list.files(path2atac, pattern = 'fastq.gz$', recursive = TRUE)
+atac.fastq.files <- atac.fastq.files[!grepl('Undetermined|mySample', atac.fastq.files)]
+
+##---------------------
+## Reading ATAC seq metadata
+atac_metadata_path <- '/media/ag-cherrmann/cramirez/multiome_ifn_project/data/fastq_metadata/30773-resultData.xls'
+atac_info <- readxl::read_xls(atac_metadata_path)
+atac_info <- rename(atac_info, id_lane = `Unique ID / Lane`)
+
+## Adding sample information
+atac_meta <- data.frame(fastq_file=atac.fastq.files)
+atac_meta <- mutate(atac_meta, id_lane=gsub('/.*', '', fastq_file))
+atac_meta <- merge(atac_meta, atac_info)
+
+head(atac_meta)
+atac_meta <- select(atac_meta, fastq_file, `Sample Name`)
+atac_meta <- mutate(atac_meta, fastq_file_path = paste0(path2atac, fastq_file),
+                               sample_name = gsub('_[A-D]$', '', `Sample Name`))
+## checking that file exists
+all(sapply(atac_meta$fastq_file_path, file.exists))
+
+## lane
+atac_meta <- mutate(atac_meta, lane_number=gsub('.*-LR-|_[IR][12].*', '', fastq_file))
+atac_meta <- mutate(atac_meta, lane_number=as.integer(as.factor(lane_number)))
+
+## read type
+atac_meta <- mutate(atac_meta, read_type=gsub('.fastq.gz', '', fastq_file))
+atac_meta <- mutate(atac_meta, read_type=gsub('.*_', '', read_type))
+
+## sample id + lane
+atac_meta <- mutate(atac_meta, sample_lane=gsub('/fastq.*', '', fastq_file))
+
+        
+## Renaming
+atac_meta <- mutate(atac_meta,
+                    fastq_renamed=paste0(
+                            sample_name,
+                            '_S1_L00',
+                            lane_number,
+                            '_', read_type,
+                            '_fastq.gz'
+                    ))
+atac_meta <- mutate(atac_meta, 
+                    fastq_file_renamed_path = paste0(path2atac, sample_lane, '/fastq/', fastq_renamed))
+head(atac_meta)
+
+write_tsv(atac_meta, file = '/media/sds-hd/sd21e005/binder_multiome/multiome_ifn_project/data/atac_renamed_fastq.tsv')
+
+##------------------
+## Creating hard links
+for (i in 1:nrow(atac_meta)) { 
+        command <- paste0('ln ', atac_meta$fastq_file_path[i], ' ', atac_meta$fastq_file_renamed_path[i]) 
+        cat('Executing', command, '\n')
+        system(command)
+}
+
+list.files(path2rna, pattern = 'fastq.gz$', recursive = TRUE)
+
+
+
+##--------------------------
+## Merging information
+rna_libraries <- select(rna_meta, fastq_path_renamed, SAMPLE_NAME) 
+rna_libraries <- mutate(rna_libraries, library_type='Gene Expression')
+rna_libraries <- rename(rna_libraries, fastqs=fastq_path_renamed, sample=SAMPLE_NAME)
+
+atac_libraries <- select(atac_meta, fastq_file_renamed_path, sample_name)
+atac_libraries <- mutate(atac_libraries, library_type='Chromatin Accessibility')
+atac_libraries <- rename(atac_libraries, sample=sample_name, fastqs=fastq_file_renamed_path)
+
+multi_libraries <- rbind(rna_libraries, atac_libraries)
+
+samples <- unique(multi_libraries$sample)
+
+path2librariesCSV <- '/media/sds-hd/sd21e005/binder_multiome/multiome_ifn_project/data/libraries'
+if ( ! dir.exists(path2librariesCSV)){
+        dir.create(path2librariesCSV)
+}
+
+multi_libraries <- mutate(multi_libraries, fastqs=gsub('fastq/.*', 'fastq', fastqs))
+for (samp in samples) {
+        multi_library.df <- filter(multi_libraries, sample==samp)
+        multi_library.df <- unique(multi_library.df)
+        cat('Processing', paste0(path2librariesCSV, '/', samp, '_libraries.csv'), '\n')
+        write_csv(multi_library.df, 
+                  file = paste0(path2librariesCSV, '/', samp, '_libraries.csv'))
+}
+
+
+##-------------------
+## Subsetting for testing
+sample <- samples[1]
+
+
+with(multi_libraries, gsub('fastq/.*', 'fastq/', fastqs))
+
+
+
+
+##---------------------
+## Counting
+reference_path <- '/media/sds-hd/sd21e005/binder_multiome/reference/human/'
+mod_load <- 'module load cellranger-atac/2.0.0; '
+command <- paste0("cellranger-arc count --id=", sample, " ",
+                                        "--reference=", reference_path,
+                                        "--libraries=", paste0(path2librariesCSV, '/', sample, '_libraries.csv'))
+command <- paste0(mod_load, command)
+
+print(command)
+system(command = command)
 
 
