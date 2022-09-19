@@ -1,8 +1,16 @@
-# Multi Omic regulon and network analysis
+* Multi Omic regulon and network analysis
 
 This repository contains the analysis of multiomic GEX + ATAC Seq data of human cells treated/untreated with IFN, polyIC or dsRNA at different time points. The aim of this project is to study Genetic Regulatory Networks (GRN).
 
-path2project <- paste0('/media/sds-hd/sd21e005/binder_multiome/multiome_ifn_project/')
+The scripts for the project are stored in the github respository:
+
+`https://github.com/caramirezal/multiome_ifn_project`
+
+The data is stored locally in the SDS storage:
+
+`/media/sds-hd/sd21e005/binder_multiome/`
+
+** The pipeline:
 
 First the preprocessing_fastq.R. Fastq files need to be renamed in order to fulfill
 cellranger requirements. With this scripts hardlinks are created and additionally
