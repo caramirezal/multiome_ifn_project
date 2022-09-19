@@ -17,11 +17,14 @@ cellranger requirements. With this scripts hardlinks are created and additionall
 the libraries files necessary to define the cell ranger counting are defined.
 
 * Inputs:
-  * ATACSeq metadata: xlsx file in data/30773-resultData.xls
-  * RNASeq metadata: tsv file in data/data/220812_A00382_0469_AHHWGMDRX2/220812_A00382_0469_AHHWGMDRX2_meta.tsv
+  * ATACSeq metadata: xlsx file in `data/30773-resultData.xls`
+  * RNASeq metadata: tsv file in `data/data/220812_A00382_0469_AHHWGMDRX2/220812_A00382_0469_AHHWGMDRX2_meta.tsv`
 * Outputs:
-  * libraries: stored in data/libraries
-  * hardlinks: stored in /media/sds-hd/sd21e005/binder_multiome/data/hardlinks
+  * libraries: stored in `data/libraries`
+  * hardlinks: stored in `/media/sds-hd/sd21e005/binder_multiome/data/hardlinks`
+  
+Run: 
+
 `source(paste0(path2project, '/scripts/preprocessing_fastq.R'))`
 
 
@@ -30,7 +33,10 @@ step is optional. A table containing the checksums of the cell ranger output
 and the downloaded files are provided in the table.
 
 * Outputs: 
-  * checksum table: data/checksums/checksums.xlsx
+  * checksum table: `data/checksums/checksums.xlsx`
+  
+Run: 
+
 `source(paste0('/scripts/checksum_check.R'))`
 
 
@@ -42,5 +48,8 @@ qsub cluster.
   * library files from above
   * fastq files (hard links) defined above
 * Outputs:
-  * counts: stored in '/media/sds-hd/sd21e005/binder_multiome/counts'
+  * counts: stored in `/media/sds-hd/sd21e005/binder_multiome/counts`
+  
+Run:
+
 `system(paste0(path2project, 'scripts/qsub_job.sh'))`
