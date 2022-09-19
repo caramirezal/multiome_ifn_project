@@ -10,6 +10,8 @@ The data is stored locally in the SDS storage:
 
 `/media/sds-hd/sd21e005/binder_multiome/`
 
+
+
 ## The pipeline:
 
 First run the preprocessing_fastq.R. Fastq files need to be renamed in order to fulfill
@@ -28,6 +30,8 @@ Run:
 `source(paste0(path2project, '/scripts/preprocessing_fastq.R'))`
 
 
+---
+
 A check on the fastq integrity is given in the checksum_check.R file. This
 step is optional. A table containing the checksums of the cell ranger output
 and the downloaded files are provided in the table.
@@ -39,6 +43,8 @@ Run:
 
 `source(paste0('/scripts/checksum_check.R'))`
 
+
+---
 
 run_counting.sh counts the reads performing the cellranger-arc count algorithm.
 This file can be executed interactively or using the qsub_job.sh in the
