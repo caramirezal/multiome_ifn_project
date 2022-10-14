@@ -1,7 +1,9 @@
 ## This script contains the bioinformatic pipeline used to process multiomic data
 ## from human cell lines Treated/Untreated with IFN or polyIC
 
+## path to github project path in the curry cluster
 path2project <- paste0('/media/sds-hd/sd21e005/binder_multiome/multiome_ifn_project/')
+
 
 ## First the preprocessing_fastq.R. Fastq files need to be renamed in order to fulfill
 ## cellranger requirements. With this scripts hardlinks are created and additionally
@@ -34,3 +36,18 @@ source(paste0('/scripts/checksum_check.R'))
 system(paste0(path2project, 'scripts/qsub_job.sh'))
 
 
+## explorative_analysis.r contains processing of ATAC-Seq data using ArchR pipeline
+## Inputs:
+## - fragment files in /media/sds-hd/sd21e005/binder_multiome/counts 
+## Outputs:
+## - ArrowFiles stored in /media/sds-hd/sd21e005/binder_multiome/archer_folder
+## - ArrowProject output in the same folder above
+## - Figures: umap_projection_all_samples.pdf, umap_projection_sequencing_bias.pdf, umap_isg15_expression.pdf
+system(paste0(path2project, 'scripts/explorative_analysis.R'))
+
+## harmony_batch_correction.R contains an alternative processing with the ArchR pipeline
+## in which harmony is used to correct for sample effects
+## Inputs:
+## - fragment files in /media/sds-hd/sd21e005/binder_multiome/counts 
+## Outputs:
+## - Figures: umap_after_harmony_batch_correction.pdf, umap_projection_sequencing_bias_after_correction.pdf
