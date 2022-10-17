@@ -99,14 +99,65 @@ proj <- filterDoublets(ArchRProj = proj)
 
 
 ##-----------------------
+## Removing cells with high number of fragments > 5000
+## We observed a bias based in the UMAP representation
+proj <- proj[proj$nFrags < 5000, ]
+
+
+
+##-----------------------
 ## Dimensional reduction
-proj <- addIterativeLSI(ArchRProj = proj, useMatrix = "TileMatrix", name = "IterativeLSI")
+proj <- addIterativeLSI(
+        ArchRProj = proj, 
+        useMatrix = "TileMatrix", 
+        name = "IterativeLSI", 
+        force = TRUE
+)
 
 
 
 ##-----------------------
 ## Clustering
-proj <- addClusters(input = proj, reducedDims = "IterativeLSI")
+proj <- addClusters(
+        input = proj, 
+        reducedDims = "IterativeLSI",
+        force=TRUE
+)
+
+
+
+##-----------------------
+## Creation of pseudo-bulk relpicates as controls for
+## the peak calling
+proj <- addGroupCoverages(
+        ArchRProj = proj, 
+        groupBy = "Clusters",
+        force = TRUE
+)
+
+
+
+## Calling peaks in ATAC Seq data
+pathToMacs2 <- findMacs2()
+proj <- addReproduciblePeakSet(
+    ArchRProj = proj, 
+    groupBy = "Clusters", 
+    pathToMacs2 = pathToMacs2
+)
+proj <- addPeakMatrix(proj)
+
+
+
+
+##-----------------------
+## Dimensional reduction
+proj <- addIterativeLSI(
+        ArchRProj = proj, 
+        useMatrix = "PeakMatrix", 
+        name = "IterativeLSI", 
+        force = TRUE
+)
+
 
 
 
@@ -114,12 +165,14 @@ proj <- addClusters(input = proj, reducedDims = "IterativeLSI")
 ## UMAP projection
 proj <- addUMAP(ArchRProj = proj, 
         reducedDims = "IterativeLSI", 
-        nNeighbors = 50,
-        minDist = 0.8,
+        nNeighbors = 200,
+        minDist = 0.0001,
         threads = nthreads,
         force = TRUE,
 )
 
+
+##-----------------------
 ## Saving the project
 saveArchRProject(
         ArchRProj = proj,
@@ -134,7 +187,7 @@ saveArchRProject(
 
 ######################################################################
 
-loadArchRProject(path=archerFolder, force=FALSE, showLogo = TRUE)
+proj <- loadArchRProject(path=archerFolder, force=FALSE, showLogo = TRUE)
 
 ##---------------------
 ## Plotting UMAPs
@@ -151,7 +204,7 @@ p1 <- plotEmbedding(ArchRProj = proj,
 
 figures_folder <- '/media/sds-hd/sd21e005/binder_multiome/multiome_ifn_project/figures/'
 dir.create(figures_folder)
-pdf(paste0(figures_folder, '/umap_projection_all_samples.pdf'),
+pdf(paste0(figures_folder, '/umap_projection_all_samples_using_peaks_nfrags<5000.pdf'),
         height = 6,
         width = 6,
 )
@@ -189,7 +242,7 @@ p2 <- umap.df %>%
                         scale_color_viridis() +
                         labs(title='n Fragments')
 
-pdf(paste0(figures_folder, '/umap_projection_sequencing_bias.pdf'),
+pdf(paste0(figures_folder, '/umap_projection_sequencing_bias_using_peaks_nfrags<5000.pdf'),
         height = 6,
         width = 12
 )
@@ -209,7 +262,7 @@ p <- plotEmbedding(
     name = 'ISG15', 
     embedding = "UMAP",
     imputeWeights = getImputeWeights(proj),
-    pal = viridis()
+    size = 3
 )
 
 pdf(paste0(figures_folder, '/umap_isg15_expression.pdf'), 
@@ -220,3 +273,47 @@ p
 dev.off()
 
 
+getCellColData(proj) %>% colnames
+
+
+
+##-------------------------
+## Identification of Differential gene scores in samples
+markersGS <- getMarkerFeatures(
+    ArchRProj = proj, 
+    useMatrix = "GeneScoreMatrix", 
+    groupBy = "Sample",
+    bias = c("TSSEnrichment", "log10(nFrags)"),
+    testMethod = "wilcoxon"
+)
+
+
+
+## Interferon signature
+ifn_sign <- readLines('https://www.gsea-msigdb.org/gsea/msigdb/download_geneset.jsp?geneSetName=HECKER_IFNB1_TARGETS&fileType=txt', skip=2)
+ifn_sign <- ifn_sign[3:length(ifn_sign)]
+head(ifn_sign)
+
+
+
+pdf(paste0(path2project, '/figures/heatmap_markers_gene_scores_samples.pdf'))
+heatmapGS <- plotMarkerHeatmap(
+  seMarker = markersGS, 
+  cutOff = "FDR <= 0.4 & Log2FC >= 0", 
+  transpose = TRUE
+)
+heatmapGS
+dev.off()
+
+
+markers.df.list <- getMarkers(markersGS, cutOff = "FDR <= 1 & Log2FC != 0") 
+pdf(paste0(path2project, 'figures/vulcano_plot_markers_gene_scores.pdf'))
+plots.list <- lapply(names(markers.df.list),
+        function(name){
+                df <- markers.df.list[name][[1]] %>% as.data.frame()
+                ggplot(df, aes(x=Log2FC, y=FDR)) +  
+                        geom_point() +
+                        labs(title=name)
+})
+plots.list
+dev.off()

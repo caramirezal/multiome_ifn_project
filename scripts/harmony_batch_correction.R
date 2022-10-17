@@ -3,6 +3,7 @@
 
 ## dependencies
 library(ArchR)
+library(viridis)
 
 ## initial settings
 set.seed(333)
@@ -66,7 +67,8 @@ p1 <- plotEmbedding(ArchRProj = proj,
         size=1.3,
         labelMeans=FALSE,
         pal=sample.colors,
-)
+) +
+    theme_classic()
 pdf(paste0(path2project, 'figures/umap_after_harmony_batch_correction.pdf'))
 p1
 dev.off()
@@ -79,7 +81,7 @@ dev.off()
 ##------------------------
 ## Evaluation of bias due to sequencing
 cells.col.df <- getCellColData(proj)
-umap.df <- getEmbedding(proj)
+umap.df <- getEmbedding(proj, embedding = "UMAPHarmony")
 colnames(umap.df) <- c('umap1', 'umap2')
 ## checking barcodes order
 all(rownames(cells.col.df)==rownames(umap.df))
@@ -104,7 +106,7 @@ p2 <- umap.df %>%
                         scale_color_viridis() +
                         labs(title='n Fragments')
 
-pdf(paste0(figures_folder, '/umap_projection_sequencing_bias_after_harmony_batch_correction.pdf'),
+pdf(paste0(path2project, 'figures/umap_projection_sequencing_bias_after_harmony_batch_correction.pdf'),
         height = 6,
         width = 12
 )

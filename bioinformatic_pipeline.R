@@ -5,6 +5,7 @@
 path2project <- paste0('/media/sds-hd/sd21e005/binder_multiome/multiome_ifn_project/')
 
 
+## Fastq processing
 ## First the preprocessing_fastq.R. Fastq files need to be renamed in order to fulfill
 ## cellranger requirements. With this scripts hardlinks are created and additionally
 ## the libraries files necessary to define the cell ranger counting are defined
@@ -51,3 +52,5 @@ system(paste0(path2project, 'scripts/explorative_analysis.R'))
 ## - fragment files in /media/sds-hd/sd21e005/binder_multiome/counts 
 ## Outputs:
 ## - Figures: umap_after_harmony_batch_correction.pdf, umap_projection_sequencing_bias_after_correction.pdf
+system(paste0(path2project, 'scripts/harmony_batch_correction.R'))
+
