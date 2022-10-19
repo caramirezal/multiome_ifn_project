@@ -21,7 +21,7 @@ nthreads <- 32
 addArchRThreads(threads = nthreads) 
 
 ## re-run or load previous results
-run_archer_project_pipeline <- FALSE
+run_archer_project_pipeline <- TRUE
 
 sample.colors <- c(
         '7_3h_-IFN_polyC' = 'chartreuse',
