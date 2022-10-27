@@ -46,6 +46,9 @@ system(paste0(path2project, 'scripts/qsub_job.sh'))
 ## - Figures: umap_projection_all_samples.pdf, umap_projection_sequencing_bias.pdf, umap_isg15_expression.pdf
 system(paste0(path2project, 'scripts/explorative_analysis.R'))
 
+## The script scripts/explorative_analysis_filtering_conditions.r provides
+## an alternative analysis subsetiing to samples with good appeareance in the QC
+
 ## harmony_batch_correction.R contains an alternative processing with the ArchR pipeline
 ## in which harmony is used to correct for sample effects
 ## Inputs:
@@ -53,4 +56,25 @@ system(paste0(path2project, 'scripts/explorative_analysis.R'))
 ## Outputs:
 ## - Figures: umap_after_harmony_batch_correction.pdf, umap_projection_sequencing_bias_after_correction.pdf
 system(paste0(path2project, 'scripts/harmony_batch_correction.R'))
+
+
+
+## rna_seq_processed_individually.R performs a analysis of only the
+## gene expression data separately
+## Inouts: 
+## - Counts matrix: stored in the counts_GEX folder
+## Output:
+## - Seurat object: containing gene expression data along with annotations
+## - plots: vln_plots_QC, umap_conditions_n_qc_metrics_rnaseq.pdf
+system(paste0(path2project, 'scripts/rna_seq_processed_individually.R '))
+
+
+## ifn_signatures evaluates the expression of signatures associated to the
+## IFN response
+## Inputs:
+## - Seurat object: processed using the rna_seq_processed_individually.R above
+## Outputs:
+## - plots:
+## - DEGs:
+
 
