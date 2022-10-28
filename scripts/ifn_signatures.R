@@ -114,43 +114,43 @@ if ( recalculate_degs == TRUE ) {
 ##-----------------------
 ## DEA comparing synergystic genes vs dsRNA upregulated genes
 ## Comparing 3h IFN+polyIC vs IFN-polyIC
-degs.ifnpolyC <- FindMarkers(object = subset(seurat, 
-                                     orig.ident %in%  c('5_3h_pIFN_polyC', 
-                                                        '7_3h_-IFN_polyC') ), 
-                             ident.1 = '5_3h_pIFN_polyC', 
+degs.pifn <- FindMarkers(object = subset(seurat, 
+                                     orig.ident %in%  c('4_3h_pIFN_dsRNA',
+                                                        '5_3h_pIFN_polyC') ), 
+                             ident.1 = '4_3h_pIFN_dsRNA', 
                              logfc.threshold = 0,
                              min.pct = 0)
-colnames(degs.ifnpolyC) <- paste0(colnames(degs.ifnpolyC), '_ifnpolyC')
-degs.ifnpolyC <- rownames_to_column(degs.ifnpolyC, var = 'gene')
-degs.ifndsrna <- FindMarkers(object = subset(seurat, 
-                                          orig.ident %in%  c('4_3h_pIFN_dsRNA', 
-                                                             '6_3h_-IFN_dsRNA') ), 
-                          ident.1 = '4_3h_pIFN_dsRNA', 
+colnames(degs.pifn) <- paste0(colnames(degs.pifn), '_+IFN')
+degs.pifn <- rownames_to_column(degs.pifn, var = 'gene')
+degs.mifn <- FindMarkers(object = subset(seurat, 
+                                          orig.ident %in%  c('6_3h_-IFN_dsRNA',
+                                                             '7_3h_-IFN_polyC') ), 
+                          ident.1 = '6_3h_-IFN_dsRNA', 
                           logfc.threshold = 0,
                           min.pct = 0)
-colnames(degs.ifndsrna) <- paste0(colnames(degs.ifndsrna), '_ifndsrna')
-degs.ifndsrna <- rownames_to_column(degs.ifndsrna, var = 'gene')
+colnames(degs.mifn) <- paste0(colnames(degs.mifn), '_-IFN')
+degs.mifn <- rownames_to_column(degs.mifn, var = 'gene')
 
 
 
 ##----------------------
 ## checking up-regulation direction
-up.genes.ifnpolyC <- pull(head(degs.ifnpolyC, 10), var = 'gene')
+up.genes.pifn <- pull(head(degs.pifn, 10), var = 'gene')
 DotPlot(subset(seurat, orig.ident %in%  c('5_3h_pIFN_polyC', 
                                           '7_3h_-IFN_polyC')), 
-        features = up.genes.ifnpolyC)
+        features = up.genes.pifn)
 
 ## 
-degs.merged <- merge(degs.ifnpolyC, degs.ifndsrna)
+degs.merged <- merge(degs.pifn, degs.mifn)
 
 pdf(paste0(path2project, 'figures/scat_plot_comparing_IFN_signatures.pdf'),
     height = 6, width = 10)
 degs.merged %>%
         mutate(gene_label=ifelse(gene %in% geneSets$ifn, gene, '')) %>%
-        ggplot(aes(x=avg_log2FC_ifnpolyC,
-                   y=avg_log2FC_ifndsrna,
-                   size=-log10(p_val_ifnpolyC*p_val_ifndsrna), 
-                   colour=pct.1_ifnpolyC*pct.1_ifndsrna,
+        ggplot(aes(x=`avg_log2FC_-IFN`,
+                   y=`avg_log2FC_+IFN`,
+                   size=-log10(`p_val_-IFN`*`p_val_+IFN`), 
+                   colour=`pct.1_-IFN`*`pct.1_+IFN`,
                    label=gene_label)) +
                 geom_point() +
                 geom_text_repel(size= 3, color='black', force = 3) +
@@ -160,7 +160,9 @@ degs.merged %>%
                 scale_color_viridis() +
                 theme_classic() +
                 theme(legend.position = 'bottom') +
-                labs(x='Log2FC IFN (+/-) | polyIC',
-                     y='Log2FC IFN (+/-) | dsRNA')
+                labs(x='Log2FC dsRNA(+/-) | IFN(-)',
+                     y='Log2FC dsRNA(+/-) | IFN(+)')
 dev.off()
+
+
 
