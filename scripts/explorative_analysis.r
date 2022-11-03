@@ -6,6 +6,8 @@ library(ArchR)
 library(BSgenome.Hsapiens.UCSC.hg38)
 library(ggplot2)
 library(viridis)
+library(Matrix)
+library(dplyr)
 
 ##--------------------------
 ## Initial settings
@@ -21,7 +23,7 @@ nthreads <- 32
 addArchRThreads(threads = nthreads) 
 
 ## re-run or load previous results
-run_archer_project_pipeline <- FALSE
+run_archer_project_pipeline <- TRUE
 
 sample.colors <- c(
         '7_3h_-IFN_polyC' = 'chartreuse',
@@ -317,3 +319,37 @@ plots.list <- lapply(names(markers.df.list),
 })
 plots.list
 dev.off()
+
+
+
+##--------------------
+## Saving processed peaks
+peak.mtx <- getMatrixFromProject(proj, useMatrix = 'PeakMatrix')
+peak.mtx <- assay(peak.mtx)
+
+## extracting feature information
+ranges.df <- getMatrixFromProject(proj, useMatrix = 'PeakMatrix') %>% 
+               rowRanges() %>% as.data.frame()
+
+
+path2peaks <- '/media/sds-hd/sd21e005/binder_multiome/multiome_ifn_project/data/peaks' 
+if (! file.exists(path2peaks)){
+        dir.create(path2peaks)
+}
+
+## Writing matrix
+writeMM(peak.mtx, 
+        file = paste0(path2peaks, '/matrix.mtx'))
+
+
+## Writing barcodes
+barcodes.tsv <- data.frame(barcode=gsub('.*#', '', colnames(peak.mtx)), Sample=gsub('#.*', '', colnames(peak.mtx)))
+write_tsv(barcodes.tsv, 
+           paste0(path2peaks, '/barcodes.tsv'), 
+           col_names = FALSE)
+
+
+## Writing peaks info
+write_tsv(ranges.df, 
+          file = paste0(path2peaks, '/peaks.bed'), 
+          col_names = FALSE)
