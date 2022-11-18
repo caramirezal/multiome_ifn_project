@@ -5,8 +5,10 @@
 library(Seurat)
 library(viridis)
 library(AUCell)
-library(tidyverse)
+#library(tidyverse)
 library(ggrepel)
+library(dplyr)
+library(tibble)
 
 set.seed(333)
 
@@ -16,10 +18,16 @@ dev.off()
 source('/media/sds-hd/sd21e005/binder_multiome/multiome_ifn_project/scripts/settings.R')
 
 
+## path to output figures
+path2figures <- '/media/sds-hd/sd21e005/binder_multiome/multiome_ifn_project/figures/ifn_signatures'
+if ( ! dir.exists(path2figures)){
+        dir.create(path2figures)
+}
+
 ## Loading pre-processed seurat object
 ## the object was generated using the script stored in:
 ## scripts/rna_seq_processed_individually.R 
-seurat <- read_rds(paste0(path2project, 'data/seurat/ifn_treated_cells_rnaseq_processed_seurat.rds'))
+seurat <- readRDS(paste0(path2project, 'data/seurat/ifn_treated_cells_rnaseq_processed_seurat.rds'))
 
 
 
@@ -59,7 +67,8 @@ seurat$'ifn_aucell_signature' <- auc.df$ifn
 ## By sample
 sample.colors <- sample.colors[! names(sample.colors) %in% c('1_16h_pIFN_dsRNA','2_16h_pIFN_polyC')]
 treatment.colors <- sample.colors
-names(treatment.colors) <- sapply(names(sample.colors), function(x) substr(x, 3, str_length(x)))
+names(treatment.colors) <- sapply(names(sample.colors), function(x) substr(x, 3, nchar(x)))
+dev.off()
 sample.plot <- DimPlot(seurat, reduction = "umap", 
                        group.by = 'treatment', 
                        cols = treatment.colors, 
@@ -111,6 +120,9 @@ if ( recalculate_degs == TRUE ) {
 
 
 
+################################################################################
+
+
 ##-----------------------
 ## DEA comparing synergystic genes vs dsRNA upregulated genes
 ## Comparing 3h IFN+polyIC vs IFN-polyIC
@@ -143,8 +155,8 @@ DotPlot(subset(seurat, orig.ident %in%  c('5_3h_pIFN_polyC',
 ## 
 degs.merged <- merge(degs.pifn, degs.mifn)
 
-pdf(paste0(path2project, 'figures/scat_plot_comparing_IFN_signatures.pdf'),
-    height = 6, width = 10)
+pdf(paste0(path2figures, '/scat_plot_comparing_IFN_signatures.pdf'),
+    height = 6, width = 8)
 degs.merged %>%
         mutate(gene_label=ifelse(gene %in% geneSets$ifn, gene, '')) %>%
         ggplot(aes(x=`avg_log2FC_-IFN`,
@@ -153,7 +165,7 @@ degs.merged %>%
                    colour=`pct.1_-IFN`*`pct.1_+IFN`,
                    label=gene_label)) +
                 geom_point() +
-                geom_text_repel(size= 3, color='black', force = 3) +
+                geom_text_repel(size= 3, color='black', force = 1) +
                 geom_abline(slope = 1, intercept = c(0,0), linetype ='dashed') + 
                 geom_hline(yintercept = 0, linetype = 'dashed') +
                 geom_vline(xintercept = 0, linetype = 'dashed') +
@@ -164,5 +176,81 @@ degs.merged %>%
                      y='Log2FC dsRNA(+/-) | IFN(+)')
 dev.off()
 
+
+###########################################################################
+
+##-----------------------
+## DEA comparing synergystic genes vs dsRNA upregulated genes
+## Comparing 3h IFN+polyIC vs IFN-polyIC
+degs.ifnpolyC <- FindMarkers(object = subset(seurat, 
+                                             orig.ident %in%  c('5_3h_pIFN_polyC', 
+                                                                '7_3h_-IFN_polyC') ), 
+                             ident.1 = '5_3h_pIFN_polyC', 
+                             logfc.threshold = 0,
+                             min.pct = 0)
+colnames(degs.ifnpolyC) <- paste0(colnames(degs.ifnpolyC), '_ifnpolyC')
+degs.ifnpolyC <- rownames_to_column(degs.ifnpolyC, var = 'gene')
+degs.ifndsrna <- FindMarkers(object = subset(seurat, 
+                                             orig.ident %in%  c('4_3h_pIFN_dsRNA', 
+                                                                '6_3h_-IFN_dsRNA') ), 
+                             ident.1 = '4_3h_pIFN_dsRNA', 
+                             logfc.threshold = 0,
+                             min.pct = 0)
+colnames(degs.ifndsrna) <- paste0(colnames(degs.ifndsrna), '_ifndsrna')
+degs.ifndsrna <- rownames_to_column(degs.ifndsrna, var = 'gene')
+
+
+
+##----------------------
+## checking up-regulation direction
+up.genes.ifnpolyC <- pull(head(degs.ifnpolyC, 10), var = 'gene')
+DotPlot(subset(seurat, orig.ident %in%  c('5_3h_pIFN_polyC', 
+                                          '7_3h_-IFN_polyC')), 
+        features = up.genes.ifnpolyC)
+
+## 
+degs.merged <- merge(degs.ifnpolyC, degs.ifndsrna)
+
+
+pdf(paste0(path2figures, '/scat_plot_comparing_IFN_signatures_preVsNo_treatment.pdf'),
+    height = 6, width = 8)
+degs.merged %>%
+        mutate(gene_label=ifelse(gene %in% geneSets$ifn, gene, '')) %>%
+        ggplot(aes(x=avg_log2FC_ifnpolyC,
+                   y=avg_log2FC_ifndsrna,
+                   size=-log10(p_val_ifnpolyC*p_val_ifndsrna), 
+                   colour=pct.1_ifnpolyC*pct.1_ifndsrna,
+                   label=gene_label)) +
+        geom_point() +
+        geom_text_repel(size= 3, color='black', force = 1) +
+        geom_abline(slope = 1, intercept = c(0,0), linetype ='dashed') + 
+        geom_hline(yintercept = 0, linetype = 'dashed') +
+        geom_vline(xintercept = 0, linetype = 'dashed') +
+        scale_color_viridis() +
+        theme_classic() +
+        theme(legend.position = 'bottom') +
+        labs(x='Log2FC IFN (+/-) | polyC',
+             y='Log2FC IFN (+/-) | dsRNA')
+dev.off()
+
+
+
+
+
+###########################################################################
+## GEX visualization
+
+
+pdf(file = paste0(path2figures, '/ifn_signatures_by_sample.pdf'),
+    width = 20,
+    height = 4)
+ifn_genes <- geneSets$ifn[geneSets$ifn %in% rownames(seurat)]
+DotPlot(seurat, 
+        group.by = 'treatment', 
+        features = ifn_genes, 
+        cols = 'RdYlGn') +
+        theme(axis.text.x = element_text(angle = 45, hjust = 1)) +
+        labs(x='', y='')
+dev.off()
 
 
