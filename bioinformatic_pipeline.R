@@ -61,7 +61,7 @@ system(paste0(path2project, 'scripts/harmony_batch_correction.R'))
 
 ## rna_seq_processed_individually.R performs a analysis of only the
 ## gene expression data separately
-## Inouts: 
+## Inputs: 
 ## - Counts matrix: stored in the counts_GEX folder
 ## Output:
 ## - Seurat object: containing gene expression data along with annotations
@@ -71,10 +71,26 @@ system(paste0(path2project, 'scripts/rna_seq_processed_individually.R '))
 
 ## ifn_signatures evaluates the expression of signatures associated to the
 ## IFN response
-## Inputs:
-## - Seurat object: processed using the rna_seq_processed_individually.R above
+## Inputs: 
+## - Seurat object processed using the rna_seq_processed_individually.R above
+## - Signatures stored in data/signatures/ifn_signatures.xlsx and the msigdb signature
+##      HECKER_IFNB1_TARGETS
 ## Outputs:
-## - plots:
-## - DEGs:
+## - AUC scores: analysis/ifn_signatures/dsRNAVspolyC_across_conditions.tsv
+## - UMAP plot projection showing the IFN signature scores ('figures/inf_signatures/ifn_signatures.pdf')
+## - DEGs plot figures/inf_signatures/scat_plot_comparing_IFN_signatures.pdf showing the
+##    signatures comparing IFN+ dsRNA Vs IFN+ polyC and on the other hand IFN- dsRNA Vs IFN- polyC. The
+##    table containing these two comparissons are stored in analysis/inf_signatures/dsRNAVspolyC_across_conditions.tsv
+##   Also the signatures comparing IFN+ polyC Vs IFN- polyC and on the other hand comparing IFN+ dsRNA 
+##   and IFN- dsRNA are plotted in the scat_plot_comparing_IFN_signatures_preVsNo_treatment.pdf
+##   and the table are stored in the file preVsnonIFN_across_conditions.tsv
+## - dot plots of the Gene Expression of genes associated to the IFN signature ('figures/ifn_signatures/ifn_signatures_by_sample.pdf',
+##   figures/inf_signatures/ifn_genes_by_sample.pdf) 
+system(paste0(path2project, 'scripts/ifn_signatures.R '))
 
 
+## ifn_signature_corregulated_genes.R file contains an analysis on the
+## corregulated genes to the IFN signatures using only the GEX data
+## Inputs:
+## - Seurat object processed using the rna_seq_processed_individually.R above
+##
