@@ -23,7 +23,7 @@ source(paste0(path2project, '/scripts/preprocessing_fastq.R'))
 ## and the downloaded files are provided in the table
 ## outputs: 
 ## - checksum table: data/checksums/checksums.xlsx
-source(paste0('/scripts/checksum_check.R'))
+source(paste0(path2project, '/scripts/checksum_check.R'))
 
 
 ## run_counting.sh counts the reads performing the cellranger-arc count algorithm.
@@ -34,17 +34,21 @@ source(paste0('/scripts/checksum_check.R'))
 ## - fastq files (hard links) defined above
 ## Outputs:
 ## - counts: stored in '/media/sds-hd/sd21e005/binder_multiome/counts'
-system(paste0(path2project, 'scripts/qsub_job.sh'))
+system(paste0(path2project, '/scripts/qsub_job.sh'))
 
 
 ## explorative_analysis.r contains processing of ATAC-Seq data using ArchR pipeline
+## in order to run this script is necessary first to build the environment in
+## envs/multiome_ifn_project.yml
+## Similar analysis are done removing some conditions or using all conditions and are shown in
+## explorative_analysis_all_conditions.r 
 ## Inputs:
 ## - fragment files in /media/sds-hd/sd21e005/binder_multiome/counts 
 ## Outputs:
 ## - ArrowFiles stored in /media/sds-hd/sd21e005/binder_multiome/archer_folder
 ## - ArrowProject output in the same folder above
 ## - Figures: umap_projection_all_samples.pdf, umap_projection_sequencing_bias.pdf, umap_isg15_expression.pdf
-system(paste0(path2project, 'scripts/explorative_analysis.R'))
+system(paste0(path2project, '/scripts/explorative_analysis.R'))
 
 ## The script scripts/explorative_analysis_filtering_conditions.r provides
 ## an alternative analysis subsetiing to samples with good appeareance in the QC
@@ -55,7 +59,7 @@ system(paste0(path2project, 'scripts/explorative_analysis.R'))
 ## - fragment files in /media/sds-hd/sd21e005/binder_multiome/counts 
 ## Outputs:
 ## - Figures: umap_after_harmony_batch_correction.pdf, umap_projection_sequencing_bias_after_correction.pdf
-system(paste0(path2project, 'scripts/harmony_batch_correction.R'))
+system(paste0(path2project, '/scripts/harmony_batch_correction.R'))
 
 
 
@@ -66,7 +70,7 @@ system(paste0(path2project, 'scripts/harmony_batch_correction.R'))
 ## Output:
 ## - Seurat object: containing gene expression data along with annotations
 ## - plots: vln_plots_QC, umap_conditions_n_qc_metrics_rnaseq.pdf
-system(paste0(path2project, 'scripts/rna_seq_processed_individually.R '))
+system(paste0(path2project, '/scripts/rna_seq_processed_individually.R'))
 
 
 ## ifn_signatures evaluates the expression of signatures associated to the
@@ -86,11 +90,37 @@ system(paste0(path2project, 'scripts/rna_seq_processed_individually.R '))
 ##   and the table are stored in the file preVsnonIFN_across_conditions.tsv
 ## - dot plots of the Gene Expression of genes associated to the IFN signature ('figures/ifn_signatures/ifn_signatures_by_sample.pdf',
 ##   figures/inf_signatures/ifn_genes_by_sample.pdf) 
-system(paste0(path2project, 'scripts/ifn_signatures.R '))
+system(paste0(path2project, '/scripts/ifn_signatures.R'))
 
 
 ## ifn_signature_corregulated_genes.R file contains an analysis on the
 ## corregulated genes to the IFN signatures using only the GEX data
 ## Inputs:
 ## - Seurat object processed using the rna_seq_processed_individually.R above
-##
+## - Interferon signatures list as those used in the ifn_signatures.R analysis
+## Outputs:
+## - ifn_signature_corregulated_genes/ifn_signatures_additional_signatures.pdf containing a umap
+##  plot showing the ifn scores values
+## - The output from a boosting model using as independent variables the ifn signatures scores
+## and the gene expression as explanatory variables stored in the 
+## ifn_signature_corregulated_genes/ifn_signature_corregulated_genes.pdf
+system(paste0(path2project, '/scripts/ifn_signature_corregulated_genes.R'))
+
+
+## scripts/differential_accesibility_peaks.R performs a wilcoxon test of the peak counts
+## for different conditions
+## Input:
+## - Peak counts from the peak calling performed by ArchR and stored in the folder data/peaks
+## Output:
+## - Seurat object containing the peaks counts stored in the 
+## analysis/differential_accessibility_analysis/atac_peaks_seu.rds
+## - A DEA comparing 4_3h_pIFN_dsRNA Vs 6_3h_-IFN_dsRNA stored in 
+## analysis/differential_accessibility_analysis/dea/differential_peaks_dsRNA.tsv.gz
+## - A DEA comparing 5_3h_pIFN_polyC Vs 7_3h_-IFN_polyCstored in 
+## analysis/differential_accessibility_analysis/dea/differential_peaks_polyC.tsv.gz
+## - umap_diff_peaks.pdf A umap plot constructed by using only the Differential peaks
+## calculated above
+## - differential_peak_analysis_IFN(+Vs-)_dsRNa_Vs_polyIC.pdf a scatter plot with the
+## AvgLog2FC comparing IFN (+Vs-) tested separately in dsRNA and polyC conditions.
+system(paste0(path2project, '/scripts/differential_accesibility_analysis.R'))
+
