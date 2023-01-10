@@ -124,3 +124,22 @@ system(paste0(path2project, '/scripts/ifn_signature_corregulated_genes.R'))
 ## AvgLog2FC comparing IFN (+Vs-) tested separately in dsRNA and polyC conditions.
 system(paste0(path2project, '/scripts/differential_accesibility_analysis.R'))
 
+
+## scripts/chromatin_priming_analysis.R file contains the comparison of
+## priming (IFN+ Vs IFN- | polyC) and and stimulation (dsRNA Vs polyC | IFN+)
+## Input:
+## - Seurat object processed using the rna_seq_processed_individually.R above
+## - Seurat object containing the peaks counts stored in the 
+## analysis/differential_accessibility_analysis/atac_peaks_seu.rds
+## Output:
+## - Differential peaks stored in the following files
+## analysis/chromatin_priming_analysis/diff_peaks_7_3h_-IFN_polyC_VS_5_3h_pIFN_polyC.tsv.gz,
+## analysis/chromatin_priming_analysis/diff_peaks_4_3h_pIFN_dsRNA_VS_5_3h_pIFN_polyC.tsv.gz,
+## analysis/chromatin_priming_analysis/diff_peaks_priming_Vs_stim.tsv.gz
+## - A scatter plot comparing the priming Vs the stimulation signatures
+## figures/chromatin_priming_analysis/differential_peak_analysis_IFN(+Vs-)_dsRNa_Vs_polyIC.pdf
+## A dotplot to check the accessibility in primed regions 
+## figures/chromatin_priming_analysis/dotplot_accesibility_selected_markers_check.pdf
+system(paste0(path2project, '/scripts/chromatin_priming_comparative_analysis.R'))
+
+
