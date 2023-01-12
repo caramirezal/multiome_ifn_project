@@ -240,7 +240,9 @@ length(unique(peaks.ann$peak))==length(peaks.ann$peak)
 peaks$'gene_annotation' <- plyr::mapvalues(peaks$peak, 
                                            from = peaks.ann$peak,
                                            to = peaks.ann$annot.symbol) 
-
+peaks$'annot.type' <- plyr::mapvalues(peaks$peak, 
+                                      from = peaks.ann$peak,
+                                      to = peaks.ann$annot.type) 
 
 intersect(colnames(peaks), colnames(markers.stim))
 peaks_gex <- merge(peaks, markers.stim)
@@ -259,7 +261,8 @@ geneSets$'RIGI_only' <- sign.df$`RIG-I only`[!is.na(sign.df$`RIG-I only`)]
 geneSets$'IFN_only' <- sign.df$`IFN only`[!is.na(sign.df$`IFN only`)]
 geneSets <- unlist(geneSets) %>% unique()
 
-
+peaks_gex %>%
+        write_tsv(file = paste0(path2analysis, '/diff_peaks_gex_ann.tsv.gz'))
 
 peaks_gex %>%
         filter(p_val < 0.05 & p_val_pVsnIFN_polyC < 0.05) %>%
@@ -290,6 +293,231 @@ peaks_gex %>%
         theme_classic() +
         theme(legend.position = 'none') +
         labs(x='Log2FC IFN (+/-) | polyC',
-             y= 'Log2FC dsRNA(+/-) | IFN')
+             y='Log2FC dsRNA(+/-) | IFN')
 
 
+peaks.ann %>%
+        #filter(annot.type == 'hg38_genes_promoters') %>%
+        dim()
+## Split the genes in three categories:
+## a) gained after IFN
+## b) gained after dsRNA
+peaks_gex <- peaks_gex %>%
+        mutate(priming=ifelse(avg_log2FC_pVsnIFN_polyC>=0 & p_val_pVsnIFN_polyC < 0.05,
+                              'gained_after_IFN', 'non-gained')) %>%
+        mutate(stimulation=ifelse(avg_log2FC_pVsndsRNA_IFN>=0 & p_val_pVsndsRNA_IFN < 0.05,
+                                  'gained_after_dsRNA', 'non-gained')) %>%
+        mutate(gex_upregulation=ifelse(avg_log2FC>=0 & p_val < 0.05 ,
+                                       'up-regulated', 'non-upregulated')) %>%
+        mutate(category=paste0(priming, ':', stimulation))
+peaks_gex$category <- plyr::mapvalues(peaks_gex$category, 
+                                        from = unique(peaks_gex$category),
+                                        to = c('non-gained',
+                                               'gained_after_IFN',
+                                               'gained_after_dsRNA'))
+
+
+peaks_gex %>%
+        filter( avg_log2FC > 0 &                            ## only up-regulated degs dsRNA Vs polyC | PolyC
+                        p_val < 0.05)  %>%                  ## only significant degs
+        filter( p_val_pVsnIFN_polyC < 0.05 ) %>%            ## primed regions with significant change threshold
+        filter( p_val_pVsndsRNA_IFN < 0.05 ) %>%            ## primed regions with significant change threshold
+        filter( annot.type == 'hg38_genes_promoters' ) %>%  ## Only region in promoters
+        ggplot(aes(x=gex_upregulation,
+                   fill=category)) +
+                geom_bar(position = 'stack') +
+                labs(x='', y='# Up-regulated genes') +
+                coord_flip()
+
+
+
+
+######################################
+## Priming Signature - Vulcano plot
+primed.peaks.df <- subset(peaks_gex, 
+                          avg_log2FC_pVsnIFN_polyC > 0 & 
+                                  p_val_pVsnIFN_polyC < 0.05 &
+                                  annot.type == 'hg38_genes_promoters') %>%
+                        arrange(desc(avg_log2FC_pVsnIFN_polyC))
+nb.priming_peaks <- primed.peaks.df %>% nrow()
+selected.priming.peaks <- head(primed.peaks.df) 
+vulcano.priming <- peaks_gex %>%
+        ggplot(aes(x=avg_log2FC_pVsnIFN_polyC,
+                   y=-log10(p_val_pVsnIFN_polyC))) +
+        geom_point(colour='gray80') +
+        geom_point(data = subset(peaks_gex, 
+                                 avg_log2FC_pVsnIFN_polyC > 0 & 
+                                         p_val_pVsnIFN_polyC < 0.05 &
+                                         annot.type == 'hg38_genes_promoters'),
+                   aes(x=avg_log2FC_pVsnIFN_polyC,
+                       y=-log10(p_val_pVsnIFN_polyC)),
+                   colour = 'darkorange',
+                   alpha=0.5) +
+        geom_text(data = data.frame(
+                'avg_log2FC_pVsnIFN_polyC' = 0.1,
+                'p_val_pVsnIFN_polyC' = 0.001
+        ), aes(x=avg_log2FC_pVsnIFN_polyC,
+               y=-log10(p_val_pVsnIFN_polyC),
+               label = nb.priming_peaks),
+        size = 12
+        ) +
+        theme_classic() + 
+        theme(axis.text = element_text(size=20),
+              text = element_text(size=24)) +
+        geom_vline(xintercept = 0,
+                   linetype = 'dashed',
+                   colour = 'red')  + 
+        geom_hline(yintercept = -log10(0.05),
+                   linetype = 'dashed',
+                   colour = 'red') +
+        xlim(c(-0.2, 0.2)) +
+        labs(x='Avg Log2FC',
+             y='-Log10(p-Value)',
+             title = 'IFN (+/-) | polyC')
+
+
+
+
+
+
+######################################
+## Stimulation Signature - Vulcano plot
+stim.peaks.df <- subset(peaks_gex, 
+                          avg_log2FC_pVsndsRNA_IFN > 0 & 
+                                  p_val_pVsndsRNA_IFN < 0.05 &
+                                  annot.type == 'hg38_genes_promoters') %>%
+        arrange(desc(avg_log2FC_pVsndsRNA_IFN))
+nb.stim_peaks <- stim.peaks.df %>% nrow()
+head(stim.peaks.df) 
+vulcano.stim <- peaks_gex %>%
+        ggplot(aes(x=avg_log2FC_pVsndsRNA_IFN,
+                   y=-log10(p_val_pVsndsRNA_IFN))) +
+        geom_point(colour='gray80') +
+        geom_point(data = subset(peaks_gex, 
+                                         avg_log2FC_pVsndsRNA_IFN > 0 & 
+                                         p_val_pVsndsRNA_IFN < 0.05 &
+                                         annot.type == 'hg38_genes_promoters'),
+                   aes(x=avg_log2FC_pVsndsRNA_IFN,
+                       y=-log10(p_val_pVsndsRNA_IFN)),
+                   colour = 'darkolivegreen3',
+                   alpha=0.5) +
+        geom_text(data = data.frame(
+                'avg_log2FC_pVsndsRNA_IFN' = 0.1,
+                'p_val_pVsndsRNA_IFN' = 0.001
+        ), aes(x=avg_log2FC_pVsndsRNA_IFN,
+               y=-log10(p_val_pVsndsRNA_IFN),
+               label = nb.stim_peaks),
+        size = 12
+        ) +
+        theme_classic() + 
+        theme(axis.text = element_text(size=20),
+              text = element_text(size=24)) +
+        geom_vline(xintercept = 0,
+                   linetype = 'dashed',
+                   colour = 'red')  + 
+        geom_hline(yintercept = -log10(0.05),
+                   linetype = 'dashed',
+                   colour = 'red') +
+        xlim(c(-0.2, 0.2)) +
+        labs(x='Avg Log2FC',
+             y='-Log10(p-Value)',
+             title = 'dsRNA (+/-) | IFN+')
+
+
+
+
+###########################################
+## Markers dsRNA stimulation
+overlap.df <- rbind(
+        subset(primed.peaks.df, p_val < 0.05 ),
+        subset(stim.peaks.df, p_val < 0.05)
+) %>% arrange(desc(avg_log2FC)) 
+vulcano.stim.degs <- peaks_gex %>%
+        ggplot(aes(x=avg_log2FC,
+                   y=-log10(p_val))) +
+        geom_point(colour='gray80') +
+        ## Add primed genes
+        geom_point(data = subset(peaks_gex, 
+                                 p_val < 0.05 & 
+                                 avg_log2FC_pVsndsRNA_IFN > 0 & 
+                                         p_val_pVsndsRNA_IFN < 0.05 &
+                                 annot.type == 'hg38_genes_promoters'),
+                   aes(x=avg_log2FC,
+                       y=-log10(p_val)),
+                   colour = 'darkolivegreen3',
+                   alpha=0.5) +
+        ## Add stimulated genes
+        geom_point(data = subset(peaks_gex, 
+                                 p_val < 0.05 & 
+                                         avg_log2FC_pVsnIFN_polyC > 0 & 
+                                         p_val_pVsnIFN_polyC < 0.05 &
+                                         annot.type == 'hg38_genes_promoters'),
+                   aes(x=avg_log2FC,
+                       y=-log10(p_val)),
+                   colour = 'darkorange',
+                   alpha=0.5) +
+        ## up-regulated genes
+        geom_text(data = data.frame(
+                'avg_log2FC' = 2,
+                'p_val' = (1/10**100)
+        ), aes(x=avg_log2FC,
+               y=-log10(p_val),
+               label = nrow(subset(overlap.df, 0 < avg_log2FC))),
+        size = 12
+        ) +
+        ## down-regulated genes
+        geom_text(data = data.frame(
+                'avg_log2FC' = -2.5,
+                'p_val' = (1/10**100)
+        ), aes(x=avg_log2FC,
+               y=-log10(p_val),
+               label = nrow(subset(overlap.df, avg_log2FC < 0 ))),
+        size = 12
+        ) +
+        ## Add synergistic genes
+        geom_vline(xintercept = 0,
+                   linetype = 'dashed',
+                   colour = 'red') +
+        theme_classic() +
+        theme(axis.text = element_text(size=20),
+              text = element_text(size=24)) +
+        labs(x='Avg Log2FC',
+             y='-Log10(p-Value)',
+             title = 'DEG - dsRNA (+/-) | IFN+')
+                        
+
+
+overlap.df$'condition_of_increase' <- sapply(
+        1:nrow(overlap.df),
+        function(idx){
+              res <- 'None'
+              if ( overlap.df$peak[idx] %in% stim.peaks.df$peak) {
+                      res <- 'dsRNA'
+              } 
+              if ( overlap.df$peak[idx] %in% primed.peaks.df$peak) {
+                      res <- 'IFN'
+              }
+              res
+        }
+) 
+barplot.primVsStim <- overlap.df %>%
+        filter(avg_log2FC > 0 ) %>%
+        ggplot(aes(x=gex_upregulation,
+                   fill=condition_of_increase)) +
+        geom_bar(position = 'stack') +
+        theme_classic() +
+        theme(axis.text.y = element_blank(),
+              axis.ticks.y = element_blank(),
+              axis.line.y = element_blank(),
+              axis.text = element_text(size=20),
+              text= element_text(size=24),
+              legend.position = 'bottom') +
+        labs(x='', 
+             y='# Up-regulated genes',
+             fill='') +
+        coord_flip()
+
+
+( vulcano.priming / vulcano.stim ) 
+vulcano.stim.degs 
+barplot.primVsStim 
