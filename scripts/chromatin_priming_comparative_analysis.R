@@ -9,6 +9,7 @@ library(tibble)
 library(readr)
 library(viridis)
 library(ggrepel)
+library(enrichR)
 
 source('/media/sds-hd/sd21e005/binder_multiome/multiome_ifn_project/scripts/settings.R')
 
@@ -127,6 +128,8 @@ peaks <- mutate(peaks,
 peaks <- mutate(peaks, highlight = ifelse(peak %in% top.peaks,
                                           TRUE, FALSE))
 primingVsStim.scatter_plot <- peaks %>%
+        filter(`pct.1_pVsnIFN_polyC` > 0.05 & 
+                       `pct.1_pVsndsRNA_IFN` > 0.05 ) %>%
         ggplot(aes(x = avg_log2FC_pVsnIFN_polyC, 
                    y = avg_log2FC_pVsndsRNA_IFN,
                    label = label)) +
@@ -145,9 +148,24 @@ primingVsStim.scatter_plot <- peaks %>%
                    colour = 'red') +
         geom_smooth(method = 'lm') +
         theme_classic() +
-        theme(legend.position = 'none') +
+        theme(legend.position = 'none',
+              text = element_text(size = 20)) +
         labs(x='Log2FC IFN (+/-) | polyC',
              y= 'Log2FC dsRNA(+/-) | IFN')
+
+
+select(peaks, `pct.1_pVsnIFN_polyC`, `pct.1_pVsndsRNA_IFN`) %>%
+        reshape2::melt() %>%
+        ggplot(aes(x=100*value)) +
+                geom_histogram(bins = 50) +
+                geom_vline(xintercept = 0.05,
+                           linetype = 'dashed',
+                           colour = 'red') +
+                facet_wrap(~variable, ncol=1) +
+                scale_y_continuous(labels = function(x) format(x, scientific = TRUE)) +
+                theme_bw() +
+                theme(text = element_text(size=20)) +
+                labs(x='% Cells with counts > 0  in Peaks', y='')
 
 
 primingVsStim.scatter_plot + dotplot.check
@@ -487,15 +505,22 @@ vulcano.stim.degs <- peaks_gex %>%
                         
 
 
+primed.genes <- subset(primed.peaks.df, p_val < 0.05 & 0 <  avg_log2FC ) %>% pull(gene_annotation)
+stim.genes <- subset( stim.peaks.df, p_val < 0.05 & 0 <  avg_log2FC  ) %>% pull(gene_annotation)
+intersect.genes <- intersect(primed.genes, stim.genes)
 overlap.df$'condition_of_increase' <- sapply(
         1:nrow(overlap.df),
         function(idx){
               res <- 'None'
-              if ( overlap.df$peak[idx] %in% stim.peaks.df$peak) {
+              if ( overlap.df$gene_annotation[idx] %in% stim.genes ) {
                       res <- 'dsRNA'
               } 
-              if ( overlap.df$peak[idx] %in% primed.peaks.df$peak) {
+              if ( overlap.df$gene_annotation[idx] %in% primed.genes) {
                       res <- 'IFN'
+              }
+              if ( overlap.df$gene_annotation[idx] %in% stim.genes &
+                   overlap.df$gene_annotation[idx] %in% primed.genes ) {
+                      res <- 'Both'
               }
               res
         }
@@ -505,6 +530,9 @@ barplot.primVsStim <- overlap.df %>%
         ggplot(aes(x=gex_upregulation,
                    fill=condition_of_increase)) +
         geom_bar(position = 'stack') +
+        scale_fill_manual(values = c('IFN'='darkorange',
+                                     'dsRNA'='darkolivegreen3',
+                                     'Both'='cyan3')) +
         theme_classic() +
         theme(axis.text.y = element_blank(),
               axis.ticks.y = element_blank(),
@@ -521,3 +549,51 @@ barplot.primVsStim <- overlap.df %>%
 ( vulcano.priming / vulcano.stim ) 
 vulcano.stim.degs 
 barplot.primVsStim 
+
+
+
+
+
+#############################################
+## Gene set enrich analysis of genes up-regulated and with changes
+## in chromatin accessibility
+dbs <- listEnrichrDbs()
+dbs <- c('Reactome_2022', 'GO_Biological_Process_2021', 'GO_Cellular_Component_2021',
+         'KEGG_2021_Human', 'MSigDB_Hallmark_2020')
+up_regulated_genes <- filter(primed.peaks.df, avg_log2FC > 0 &
+                                     p_val < 0.05 ) %>% pull(gene_annotation)
+
+enriched <- enrichr(up_regulated_genes, dbs)
+enrich.plot <- plotEnrich(enriched$Reactome_2022, 
+           showTerms = 20, 
+           numChar = 60, 
+           y = "Count", 
+           orderBy = "P.value") +
+                labs(x='', 
+                     title='Up-regulated After IFN',
+                     subtitle = 'Open after ')
+
+
+enriched.primed <- enrichr(primed.genes, dbs)
+enrich.primed.plot <- plotEnrich(enriched.primed$Reactome_2022, 
+                          showTerms = 20, 
+                          numChar = 60, 
+                          y = "Count", 
+                          orderBy = "P.value") +
+        labs(x='', 
+             title='Up-regulated After IFN')
+
+enriched.stim <- enrichr(stim.genes, dbs)
+enrich.stim.plot <- plotEnrich(enriched.stim$Reactome_2022, 
+                          showTerms = 20, 
+                          numChar = 60, 
+                          y = "Count", 
+                          orderBy = "P.value") +
+        labs(x='', 
+             title='Up-regulated After dsRNA')
+
+
+enrich.primed.plot + enrich.stim.plot
+
+
+intersect(primed.genes, geneSets)
