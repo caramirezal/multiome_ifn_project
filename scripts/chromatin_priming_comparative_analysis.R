@@ -37,9 +37,36 @@ if ( ! dir.exists(path2figures) ){
         dir.create(path2figures)
 }
 
-## DEGs comparing 3 hrs IFN vs non-IFN (during polyC)
-Idents(seurat) <- seurat$samples
 
+## Loading annotated peaks to genes
+peaks.ann <- read_rds('/media/sds-hd/sd21e005/binder_multiome/multiome_ifn_project/analysis/peaks_annotation/annotated_peaks_unambiguously.rds')
+peaks.ann <- mutate(peaks.ann, peak=paste0(seqnames, ':', start, '-', end))
+head(peaks.ann)
+length(unique(peaks.ann$peak))==length(peaks.ann$peak)
+
+
+
+
+###############################
+## Subsetting to IFN genes
+sign.df <- readxl::read_xlsx('/media/sds-hd/sd21e005/binder_multiome/multiome_ifn_project/data/signatures/ifn_signatures.xlsx')
+## Downloading list of genes
+url.list <- list(ifn='https://www.gsea-msigdb.org/gsea/msigdb/download_geneset.jsp?geneSetName=HECKER_IFNB1_TARGETS&fileType=txt')
+## Loading gene sets
+paths.hum.list <- lapply(url.list, readLines)
+geneSets <- lapply(paths.hum.list, function(path) path[3:length(path)])
+geneSets$'antiviral_response_total' <- sign.df$`antiviral response total`[!is.na(sign.df$`antiviral response total`)]
+geneSets$'RIGI_only' <- sign.df$`RIG-I only`[!is.na(sign.df$`RIG-I only`)]
+geneSets$'IFN_only' <- sign.df$`IFN only`[!is.na(sign.df$`IFN only`)]
+geneSets <- unlist(geneSets) %>% unique()
+
+
+
+
+
+#######################################################
+## Differential peaks comparing 3 hrs IFN vs non-IFN (during polyC)
+Idents(seurat) <- seurat$samples
 if ( rerun_analysis == TRUE ) {
         degs.priming <- FindMarkers(
                 object = subset(seurat,
@@ -65,7 +92,11 @@ degs.priming <- read_tsv(paste0(path2analysis,
                                 '/diff_peaks_7_3h_-IFN_polyC_VS_5_3h_pIFN_polyC.tsv.gz'))
 
 
-## DEGs comparing 3 hrs dsRNA vs polyC during IFN conditions
+
+
+
+#############################################################
+## Differential peaks comparing 3 hrs dsRNA vs polyC during IFN conditions
 if ( rerun_analysis == TRUE) {
         degs.stim <- FindMarkers(
                 object = subset(seurat,
@@ -90,8 +121,31 @@ degs.stim  <- read_tsv(paste0(path2analysis,
 ## Massaging results to make a vulcano plot
 degs.priming <- read_tsv(file = paste0(path2analysis,
                                        '/diff_peaks_7_3h_-IFN_polyC_VS_5_3h_pIFN_polyC.tsv.gz')) 
+
+degs.priming %>%
+        mutate(gene_annotation=plyr::mapvalues(degs.priming$peak,
+                                               from = peaks.ann$peak,
+                                               to = peaks.ann$annot.symbol),
+               annot.type=plyr::mapvalues(degs.priming$peak,
+                                               from = peaks.ann$peak,
+                                               to = peaks.ann$annot.type)) %>%
+        filter(p_val_pVsnIFN_polyC < 0.05 & annot.type == 'hg38_genes_promoters') %>%
+        arrange(desc(avg_log2FC_pVsnIFN_polyC)) %>%
+        as.data.frame() %>%
+        head()
 degs.stim <- read_tsv(file = paste0(path2analysis,
                                        '/diff_peaks_4_3h_pIFN_dsRNA_VS_5_3h_pIFN_polyC.tsv.gz'))
+degs.stim %>%
+        mutate(gene_annotation=plyr::mapvalues(degs.stim$peak,
+                                               from = peaks.ann$peak,
+                                               to = peaks.ann$annot.symbol),
+               annot.type=plyr::mapvalues(degs.stim$peak,
+                                          from = peaks.ann$peak,
+                                          to = peaks.ann$annot.type)) %>%
+        filter(p_val_pVsndsRNA_IFN < 0.05 & annot.type == 'hg38_genes_promoters') %>%
+        arrange(desc(avg_log2FC_pVsndsRNA_IFN)) %>%
+        as.data.frame() %>%
+        head()
 colnames(degs.priming); colnames(degs.stim)
 peaks <- merge(degs.priming, degs.stim)
 head(peaks)
@@ -121,7 +175,10 @@ head(peaks)
 ##          '/media/sds-hd/sd21e005/binder_multiome/multiome_ifn_project/analysis/chromatin_priming_comparative_analysis/diff_peaks_priming_Vs_stim.tsv.gz')
 
 
-## Plotting
+
+
+####################################################
+## Plotting priming Vs stimulation
 peaks <- mutate(peaks, 
                 label = ifelse(peak %in% top.peaks,
                                peak, '')) 
@@ -154,7 +211,11 @@ primingVsStim.scatter_plot <- peaks %>%
              y= 'Log2FC dsRNA(+/-) | IFN')
 
 
-select(peaks, `pct.1_pVsnIFN_polyC`, `pct.1_pVsndsRNA_IFN`) %>%
+
+
+##################################################
+## Plotting frequency of peaks with a certain % of cells with counts > 0
+ pct.cells.hist <- select(peaks, `pct.1_pVsnIFN_polyC`, `pct.1_pVsndsRNA_IFN`) %>%
         reshape2::melt() %>%
         ggplot(aes(x=100*value)) +
                 geom_histogram(bins = 50) +
@@ -165,15 +226,16 @@ select(peaks, `pct.1_pVsnIFN_polyC`, `pct.1_pVsndsRNA_IFN`) %>%
                 scale_y_continuous(labels = function(x) format(x, scientific = TRUE)) +
                 theme_bw() +
                 theme(text = element_text(size=20)) +
-                labs(x='% Cells with counts > 0  in Peaks', y='')
+                labs(x='% Cells with counts > 0', y='')
 
 
 primingVsStim.scatter_plot + dotplot.check
   
 
-pdf(file = paste0(path2figures, '/sattter_plot_priming_vs_stim.pdf'),
+pdf(file = paste0(path2figures, '/scatter_plot_priming_vs_stim.pdf'),
     height = 6, width = 6)
 primingVsStim.scatter_plot
+pct.cells.hist
 dev.off()
 
 
@@ -184,7 +246,9 @@ dev.off()
 
 
 
-##################################
+
+
+#################################################
 ## labeling peaks according to up- or down-regulation
 peaks <- peaks %>%
         mutate(priming=ifelse(avg_log2FC_pVsnIFN_polyC>=0,
@@ -225,13 +289,18 @@ bar.perc / bar.numb
 dev.off()
 
 
-##################################
+
+
+##################################################
 ## Combining Chromatin and Gene expression information
 seurat.gex <- readRDS('/media/sds-hd/sd21e005/binder_multiome/multiome_ifn_project/data/seurat/ifn_treated_cells_rnaseq_processed_seurat.rds')
 
 seurat.gex$treatment %>% 
         table()
 
+
+
+#################################################
 ## Calculating degs after stimulation
 Idents(seurat.gex) <- seurat.gex$treatment 
 if ( rerun_analysis == TRUE ) {
@@ -245,16 +314,191 @@ if ( rerun_analysis == TRUE ) {
         )
         markers.stim <- rownames_to_column(markers.stim, var = 'gene_annotation')
         write_tsv(markers.stim,
-                  paste0(path2analysis, 'degs_priming_3h_pIFN_dsRNA_VS_3h_pIFN_polyC.tsv.gz'))
+                  paste0(path2analysis, '/degs_priming_3h_pIFN_dsRNA_VS_3h_pIFN_polyC.tsv.gz'))
 }
 
-markers.stim <- read_tsv(paste0(path2analysis, 'degs_priming_3h_pIFN_dsRNA_VS_3h_pIFN_polyC.tsv.gz'))
+markers.stim <- read_tsv(paste0(path2analysis, '/degs_priming_3h_pIFN_dsRNA_VS_3h_pIFN_polyC.tsv.gz'))
 
-## Loading annotated peaks to genes
-peaks.ann <- read_rds('/media/sds-hd/sd21e005/binder_multiome/multiome_ifn_project/analysis/peaks_annotation/annotated_peaks_unambiguously.rds')
-peaks.ann <- mutate(peaks.ann, peak=paste0(seqnames, ':', start, '-', end))
-head(peaks.ann)
-length(unique(peaks.ann$peak))==length(peaks.ann$peak)
+        
+
+
+######################################
+## Comparing transcriptional signatures
+
+## Calculating degs after stimulation
+Idents(seurat.gex) <- seurat.gex$treatment 
+if ( rerun_analysis == TRUE ) {
+        markers.prim <- FindMarkers(
+                subset( seurat.gex, treatment %in% c('3h_pIFN_polyC',
+                                                     '3h_-IFN_polyC') ), 
+                ident.1 = '3h_pIFN_polyC', 
+                ident.2 = '3h_-IFN_polyC', 
+                logfc.threshold = 0, 
+                min.pct = 0
+        )
+        markers.prim <- rownames_to_column(markers.prim, var = 'gene_annotation')
+        write_tsv(markers.prim,
+                  paste0(path2analysis, '/degs_priming_3h_pIFN_polyCA_VS_3h_-IFN_polyC.tsv.gz'))
+}
+
+markers.prim <- read_tsv(paste0(path2analysis, '/degs_priming_3h_pIFN_polyCA_VS_3h_-IFN_polyC.tsv.gz'))
+
+
+colnames(markers.prim) <- c('gene', paste0(colnames(markers.prim), '_priming')[2:ncol(markers.prim)] )
+colnames(markers.stim) <- c('gene', paste0(colnames(markers.stim), '_stim')[2:ncol(markers.stim)])
+markers <- merge(markers.prim, markers.stim)
+head(markers)
+markers <- markers %>%
+        mutate(highlight=ifelse(gene %in% geneSets,
+                                TRUE, FALSE))
+
+
+
+#####################################
+## GEX Priming signature
+up.reg.prim <- arrange(markers.prim, desc(avg_log2FC_priming)) %>%
+                        head(5) %>%
+                        pull(gene)
+down.reg.prim <- arrange(markers.prim, desc(avg_log2FC_priming)) %>%
+        tail(5) %>%
+        pull(gene)
+markers.prim <- markers.prim %>%
+        mutate(top=ifelse(gene %in% c(up.reg.prim,
+                                      down.reg.prim),
+                          TRUE, FALSE) ) %>%
+        mutate(label=ifelse(top==TRUE, gene, ''))
+vulcano.prim.gex <- markers.prim %>%
+        ggplot(aes(x=avg_log2FC_priming,
+                               y=-log10(p_val_priming),
+                               label=label)) +
+        geom_point(colour='gray80') +
+        geom_point(data = subset(markers.prim,
+                                 top == TRUE),
+                   aes(x=avg_log2FC_priming,
+                       y=-log10(p_val_priming)),
+                   colour = 'red') +
+        geom_text_repel(max.overlaps = 100) +
+        geom_vline(xintercept = 0, 
+                   linetype = 'dashed',
+                   colour = 'red') +
+        theme_bw() +
+        theme(text = element_text(size=20)) +
+        labs(x='Avg Log2FC',
+             y='-Log10(p-Value)',
+             title = 'IFN (+/-) | polyC') +
+        xlim(c(-7, 5))
+
+
+
+## check primed genes
+dotplot.prim <- DotPlot(object = subset(seurat.gex, 
+                        treatment %in% c('3h_pIFN_polyC',
+                                         '3h_-IFN_polyC')), 
+        features = c(up.reg.prim, down.reg.prim)) +
+        scale_colour_viridis() +
+        coord_flip() +
+        labs(x='', y='') +
+                theme(axis.text.x = element_text(hjust = 1,
+                                                 angle=45),
+                      text = element_text(size=20))
+
+
+dotplot.stim <- DotPlot(object = subset(seurat.gex, 
+                                        treatment %in% c('3h_pIFN_polyC',
+                                                         '3h_pIFN_dsRNA')), 
+                        features = c(up.reg.stim, down.reg.stim)) +
+        scale_colour_viridis() +
+        coord_flip() +
+        labs(x='', y='') +
+        theme(axis.text.x = element_text(hjust = 1,
+                                         angle=45),
+              text = element_text(size=20))
+
+
+pdf(paste0(path2figures, '/dotplot_checks_gex_signatures.pdf'),
+    width = 10, height = 5)
+dotplot.prim + dotplot.stim
+dev.off()
+
+#####################################
+## GEX Stimulation signature
+up.reg.stim <- arrange(markers.stim, desc(avg_log2FC_stim)) %>%
+        head(5) %>%
+        pull(gene)
+down.reg.stim <- arrange(markers.stim, desc(avg_log2FC_stim)) %>%
+        tail(5) %>%
+        pull(gene)
+markers.stim <- markers.stim %>%
+        mutate(top=ifelse(gene %in% c(up.reg.stim,
+                                      down.reg.stim),
+                          TRUE, FALSE) ) %>%
+        mutate(label=ifelse(top==TRUE, gene, ''))
+vulcano.stim.gex <- markers.stim %>%
+        ggplot(aes(x=avg_log2FC_stim,
+                   y=-log10(p_val_stim),
+                   label=label)) +
+        geom_point(colour='gray80') +
+        geom_point(data = subset(markers.stim,
+                                 top == TRUE),
+                   aes(x=avg_log2FC_stim,
+                       y=-log10(p_val_stim)),
+                   colour = 'red') +
+        geom_text_repel(max.overlaps = 100) +
+        geom_vline(xintercept = 0, 
+                   linetype = 'dashed',
+                   colour = 'red') +
+        theme_bw() +
+        theme(text = element_text(size=20)) +
+        labs(x='Avg Log2FC',
+             y='-Log10(p-Value)',
+             title = 'dsRNA (+/-) | IFN+') +
+        xlim(c(-7, 5))
+
+
+
+pdf(paste0(path2figures, '/vulcano_plots_priming_stim_signatures_gex.pdf'),
+    width = 6, height = 9)
+vulcano.prim.gex / vulcano.stim.gex
+dev.off()
+
+
+        
+        
+pdf(paste0(path2figures, '/scatter_plot_priming_Vs_stim_signs_gex.pdf'),
+    width = 5, height = 5)
+markers %>%        
+        filter( pct.1_stim > 0.1 & pct.1_priming > 0.1 ) %>%
+        ggplot(aes(x=avg_log2FC_priming,
+                   y=avg_log2FC_stim)) +
+                geom_point(colour='gray80') +
+                geom_point(data = subset(markers, 
+                                         highlight == TRUE),
+                           aes(x=avg_log2FC_priming,
+                               y=avg_log2FC_stim),
+                           colour='red') +
+                geom_hline(yintercept = 0,
+                           linetype = 'dashed',
+                           colour = 'black') +
+                geom_vline(xintercept = 0,
+                           linetype = 'dashed',
+                           colour = 'black') +
+                geom_smooth(method = 'lm') +
+                scale_color_viridis() +
+                theme_bw() +
+                theme(text = element_text(size=20)) +
+                labs(x='Log2FC IFN (+/-) | polyC',
+                     y='Log2FC dsRNA (+/-) | IFN') 
+dev.off()
+
+
+
+
+#################################################
+## Calculating genes after priming
+
+
+
+
 peaks$'gene_annotation' <- plyr::mapvalues(peaks$peak, 
                                            from = peaks.ann$peak,
                                            to = peaks.ann$annot.symbol) 
@@ -267,56 +511,15 @@ peaks_gex <- merge(peaks, markers.stim)
 head(peaks_gex)
 
 
-## Subsetting to IFN genes
-sign.df <- readxl::read_xlsx('/media/sds-hd/sd21e005/binder_multiome/multiome_ifn_project/data/signatures/ifn_signatures.xlsx')
-## Downloading list of genes
-url.list <- list(ifn='https://www.gsea-msigdb.org/gsea/msigdb/download_geneset.jsp?geneSetName=HECKER_IFNB1_TARGETS&fileType=txt')
-## Loading gene sets
-paths.hum.list <- lapply(url.list, readLines)
-geneSets <- lapply(paths.hum.list, function(path) path[3:length(path)])
-geneSets$'antiviral_response_total' <- sign.df$`antiviral response total`[!is.na(sign.df$`antiviral response total`)]
-geneSets$'RIGI_only' <- sign.df$`RIG-I only`[!is.na(sign.df$`RIG-I only`)]
-geneSets$'IFN_only' <- sign.df$`IFN only`[!is.na(sign.df$`IFN only`)]
-geneSets <- unlist(geneSets) %>% unique()
+
 
 peaks_gex %>%
         write_tsv(file = paste0(path2analysis, '/diff_peaks_gex_ann.tsv.gz'))
 
-peaks_gex %>%
-        filter(p_val < 0.05 & p_val_pVsnIFN_polyC < 0.05) %>%
-        ggplot(aes(x=avg_log2FC_pVsnIFN_polyC,
-                   y=avg_log2FC)) +
-                geom_point()
-
-peaks_gex %>%
-        ggplot(aes(x = avg_log2FC_pVsnIFN_polyC, 
-                   y = avg_log2FC_pVsndsRNA_IFN,
-                   label = label)) +
-        geom_point(alpha=0.5,
-                   colour = 'steelblue') +
-        #geom_text_repel(max.overlaps = 100, force = 5) +
-        geom_point(data = filter(peaks_gex,
-                                 gene_annotation %in% geneSets),
-                   aes(x = avg_log2FC_pVsnIFN_polyC, 
-                       y = avg_log2FC_pVsndsRNA_IFN,
-                       colour = 'red'),
-                   alpha = 0.5 ) +
-        geom_hline(yintercept = 0,
-                   linetype = 'dashed',
-                   colour = 'red') +
-        geom_vline(xintercept = 0,
-                   linetype = 'dashed',
-                   colour = 'red') +
-        geom_smooth(method = 'lm') +
-        theme_classic() +
-        theme(legend.position = 'none') +
-        labs(x='Log2FC IFN (+/-) | polyC',
-             y='Log2FC dsRNA(+/-) | IFN')
 
 
-peaks.ann %>%
-        #filter(annot.type == 'hg38_genes_promoters') %>%
-        dim()
+
+######################################
 ## Split the genes in three categories:
 ## a) gained after IFN
 ## b) gained after dsRNA
@@ -335,17 +538,6 @@ peaks_gex$category <- plyr::mapvalues(peaks_gex$category,
                                                'gained_after_dsRNA'))
 
 
-peaks_gex %>%
-        filter( avg_log2FC > 0 &                            ## only up-regulated degs dsRNA Vs polyC | PolyC
-                        p_val < 0.05)  %>%                  ## only significant degs
-        filter( p_val_pVsnIFN_polyC < 0.05 ) %>%            ## primed regions with significant change threshold
-        filter( p_val_pVsndsRNA_IFN < 0.05 ) %>%            ## primed regions with significant change threshold
-        filter( annot.type == 'hg38_genes_promoters' ) %>%  ## Only region in promoters
-        ggplot(aes(x=gex_upregulation,
-                   fill=category)) +
-                geom_bar(position = 'stack') +
-                labs(x='', y='# Up-regulated genes') +
-                coord_flip()
 
 
 
@@ -359,9 +551,18 @@ primed.peaks.df <- subset(peaks_gex,
                         arrange(desc(avg_log2FC_pVsnIFN_polyC))
 nb.priming_peaks <- primed.peaks.df %>% nrow()
 selected.priming.peaks <- head(primed.peaks.df) 
+top3.downregulated <- peaks_gex %>%
+                           filter(p_val_pVsnIFN_polyC < 0.05 ) %>%
+                           arrange(desc(avg_log2FC_pVsnIFN_polyC)) %>%
+                                   tail(n=3) %>%
+                           pull(peak) 
 vulcano.priming <- peaks_gex %>%
+        mutate(label=ifelse(peak %in% c(primed.peaks.df$peak[1:3],
+                                        top3.downregulated),  
+                            gene_annotation, '')) %>%
         ggplot(aes(x=avg_log2FC_pVsnIFN_polyC,
-                   y=-log10(p_val_pVsnIFN_polyC))) +
+                   y=-log10(p_val_pVsnIFN_polyC),
+                   label=label)) +
         geom_point(colour='gray80') +
         geom_point(data = subset(peaks_gex, 
                                  avg_log2FC_pVsnIFN_polyC > 0 & 
@@ -379,6 +580,7 @@ vulcano.priming <- peaks_gex %>%
                label = nb.priming_peaks),
         size = 12
         ) +
+        geom_text_repel() +
         theme_classic() + 
         theme(axis.text = element_text(size=20),
               text = element_text(size=24)) +
@@ -407,9 +609,18 @@ stim.peaks.df <- subset(peaks_gex,
         arrange(desc(avg_log2FC_pVsndsRNA_IFN))
 nb.stim_peaks <- stim.peaks.df %>% nrow()
 head(stim.peaks.df) 
+top3.downregulated <- peaks_gex %>%
+        filter(p_val_pVsndsRNA_IFN < 0.05 ) %>%
+        arrange(desc(avg_log2FC_pVsndsRNA_IFN)) %>%
+        tail(n=3) %>%
+        pull(peak) 
 vulcano.stim <- peaks_gex %>%
+        mutate(label=ifelse(peak %in% c(stim.peaks.df$peak[1:3],
+                                        top3.downregulated),  
+                            gene_annotation, '')) %>%
         ggplot(aes(x=avg_log2FC_pVsndsRNA_IFN,
-                   y=-log10(p_val_pVsndsRNA_IFN))) +
+                   y=-log10(p_val_pVsndsRNA_IFN),
+                   label=label)) +
         geom_point(colour='gray80') +
         geom_point(data = subset(peaks_gex, 
                                          avg_log2FC_pVsndsRNA_IFN > 0 & 
@@ -427,6 +638,7 @@ vulcano.stim <- peaks_gex %>%
                label = nb.stim_peaks),
         size = 12
         ) +
+        geom_text_repel() +
         theme_classic() + 
         theme(axis.text = element_text(size=20),
               text = element_text(size=24)) +
@@ -546,10 +758,22 @@ barplot.primVsStim <- overlap.df %>%
         coord_flip()
 
 
+pdf(paste0(path2figures, '/vulcano_priming_and_stim.pdf'),
+    height = 8, width = 5)
 ( vulcano.priming / vulcano.stim ) 
-vulcano.stim.degs 
-barplot.primVsStim 
+dev.off()
 
+
+pdf(paste0(path2figures, '/vulcano_degs_stimulation.pdf'),
+    height = 7, width = 7)
+vulcano.stim.degs 
+dev.off()
+
+
+pdf(paste0(path2figures, '/barplot_upregulated_degs_with_associated_peaks.pdf'),
+    height = 2, width = 6)
+barplot.primVsStim 
+dev.off()
 
 
 
@@ -593,7 +817,74 @@ enrich.stim.plot <- plotEnrich(enriched.stim$Reactome_2022,
              title='Up-regulated After dsRNA')
 
 
+pdf(paste0(path2figures, '/gsea_degs_primed_and_stimulated.pdf'),
+    width = 20, height = 5)
 enrich.primed.plot + enrich.stim.plot
-
+dev.off()
 
 intersect(primed.genes, geneSets)
+
+
+
+
+
+################################################
+## Checking the state of primed open regions after dsRNA stimulation
+write_tsv(primed.peaks.df,
+          file = paste0(path2analysis, '/genes_upregualted_after_priming_487.tsv.gz'))
+write_tsv(stim.peaks.df, 
+          file = paste0(path2analysis, '/genes_upregulated_after_stimulation_219.tsv.gz'))
+
+
+primed.peaks.df <- read_tsv(paste0(path2analysis, '/genes_upregualted_after_priming_487.tsv.gz'))
+primed.peaks.df <- mutate(primed.peaks.df,
+                          category = sapply(1:nrow(primed.peaks.df),
+                                            function(idx){
+                                                    res <- 'non_significant_change'
+                                                    if ( primed.peaks.df$avg_log2FC_pVsndsRNA_IFN[idx] > 0 &
+                                                         primed.peaks.df$p_val_pVsndsRNA_IFN[idx] < 0.05 ) {
+                                                            res <- 'upregulated_after_stimulation'
+                                                    } 
+                                                    if ( primed.peaks.df$avg_log2FC_pVsndsRNA_IFN[idx] < 0 &
+                                                         primed.peaks.df$p_val_pVsndsRNA_IFN[idx] < 0.05 ) {
+                                                            res <- 'down_after_stimulation'
+                                                    }
+                                                    return(res)
+                                            }))
+primed.peaks.df$category %>% table()
+
+
+#######################################
+## Visualization of the peaks
+pdf(paste0(path2figures, '/projected_primed_peaks_on_stimulation_vulcano.pdf'),
+    height = 4, width = )
+vulcano.priming +
+peaks_gex %>%
+        ggplot(aes(x=avg_log2FC_pVsndsRNA_IFN,
+                   y=-log10(p_val_pVsndsRNA_IFN))) +
+        geom_point(colour='gray80') +
+        geom_point(data = subset(peaks_gex, 
+                                 peak %in% primed.peaks.df$peak),
+                   aes(x=avg_log2FC_pVsndsRNA_IFN,
+                       y=-log10(p_val_pVsndsRNA_IFN)),
+                   colour = 'darkorange',
+                   alpha=0.5) +
+        theme_classic() + 
+        theme(axis.text = element_text(size=20),
+              text = element_text(size=24)) +
+        geom_vline(xintercept = 0,
+                   linetype = 'dashed',
+                   colour = 'red')  + 
+        geom_hline(yintercept = -log10(0.05),
+                   linetype = 'dashed',
+                   colour = 'red') +
+        xlim(c(-0.2, 0.2)) +
+        labs(x='Avg Log2FC',
+             y='-Log10(p-Value)',
+             title = 'dsRNA (+/-) | IFN+')
+dev.off()
+
+
+
+
+
