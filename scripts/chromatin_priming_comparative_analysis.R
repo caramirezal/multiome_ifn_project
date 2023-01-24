@@ -219,7 +219,7 @@ primingVsStim.scatter_plot <- peaks %>%
         reshape2::melt() %>%
         ggplot(aes(x=100*value)) +
                 geom_histogram(bins = 50) +
-                geom_vline(xintercept = 0.05,
+                geom_vline(xintercept = 5,
                            linetype = 'dashed',
                            colour = 'red') +
                 facet_wrap(~variable, ncol=1) +
@@ -386,7 +386,7 @@ vulcano.prim.gex <- markers.prim %>%
         labs(x='Avg Log2FC',
              y='-Log10(p-Value)',
              title = 'IFN (+/-) | polyC') +
-        xlim(c(-7, 5))
+        xlim(c(-7, 7))
 
 
 
@@ -433,6 +433,7 @@ markers.stim <- markers.stim %>%
                                       down.reg.stim),
                           TRUE, FALSE) ) %>%
         mutate(label=ifelse(top==TRUE, gene, ''))
+markers.stim <- mutate(markers.stim, avg_log2FC_stim=-avg_log2FC_stim)      ## 
 vulcano.stim.gex <- markers.stim %>%
         ggplot(aes(x=avg_log2FC_stim,
                    y=-log10(p_val_stim),
@@ -452,7 +453,7 @@ vulcano.stim.gex <- markers.stim %>%
         labs(x='Avg Log2FC',
              y='-Log10(p-Value)',
              title = 'dsRNA (+/-) | IFN+') +
-        xlim(c(-7, 5))
+        xlim(c(-7, 7))
 
 
 
@@ -469,7 +470,7 @@ pdf(paste0(path2figures, '/scatter_plot_priming_Vs_stim_signs_gex.pdf'),
 markers %>%        
         filter( pct.1_stim > 0.1 & pct.1_priming > 0.1 ) %>%
         ggplot(aes(x=avg_log2FC_priming,
-                   y=avg_log2FC_stim)) +
+                   y=-avg_log2FC_stim)) +
                 geom_point(colour='gray80') +
                 geom_point(data = subset(markers, 
                                          highlight == TRUE),
