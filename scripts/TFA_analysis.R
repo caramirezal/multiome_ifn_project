@@ -1,14 +1,22 @@
 ## This script contain a transcription factor analysis of cells primed with IFN
 ## and stimulated with dsRNA
-
 library(Seurat)
 library(dplyr)
 library(readr)
 library(AUCell)
 library(ComplexHeatmap)
+library(ggrepel)
+library(igraph)
+library(viridis)
 
 ## initial settings
 source('/media/ag-cherrmann/cramirez/multiome_ifn_project/scripts/settings.R')
+
+## path to figures 
+path2figures <- '/media/ag-cherrmann/cramirez/multiome_ifn_project/figures/tfa_analysis'
+if ( ! dir.exists(path2figures) ) {
+       dir.create(path2figures) 
+}
 
 ## path to regulatory networks inferred with celloracle
 path2networks <- '/media/ag-cherrmann/cramirez/multiome_ifn_project/analysis/celloracle/'
@@ -97,9 +105,11 @@ reg.sizes.df <- data.frame(tf=names(regulon.sizes),
                            regulon_size=regulon.sizes) 
 reg.sizes.df %>%
         ggplot(aes(x=regulon_size)) +
-                geom_histogram(bins = 100) +
+                geom_histogram(bins = 100,
+                               fill = 'steelblue') +
                 geom_vline(xintercept = 30, linetype='dashed', colour='red') +
-                theme_bw()
+                theme_classic()
+dim(reg.sizes.df)
 
 
 
@@ -171,11 +181,151 @@ diff.tfa <- FindAllMarkers(seurat,
                         min.pct = 0)
 diff.tfa %>%
         group_by(cluster) %>%
-        top_n(n = 5, wt = avg_log2FC) -> top10
-
-seurat@assays$regulon_@scale.data <- auc.mtx
+        top_n(n = 5, wt = avg_log2FC) -> top
 
 
+
+##---------------------------------------------
+## Visualisation of DEA by sample
+diff.tfa$'regulon_size' <- plyr::mapvalues(diff.tfa$gene,
+                                           from = reg.sizes.df$tf,
+                                           to = reg.sizes.df$regulon_size)
+diff.tfa$regulon_size <- as.numeric(diff.tfa$regulon_size)
+vulcano.tfa <- lapply(conditions, function(cond){
+        df <- filter(diff.tfa, cluster == cond)
+        df <- arrange(df, desc(avg_log2FC))
+        top <- head(df)$gene
+        bottom <- tail(df)$gene
+        df <- df %>%
+                mutate(label=ifelse(gene %in% c(top, bottom,
+                                                'STAT1',
+                                                'STAT2'),
+                                    gene, ''))
+        df %>%
+                ggplot(aes(x=avg_log2FC, y=-log10(p_val),
+                           colour=cluster,
+                           label=label,
+                           size=regulon_size)) +
+                geom_point() +
+                geom_point(data = df,
+                           aes(x=avg_log2FC, 
+                                    y=-log10(p_val),
+                                    size=regulon_size),
+                           shape=1, 
+                           colour='black', 
+                           alpha=0.5) +
+                geom_text_repel(colour='black',
+                                max.overlaps = 1000,
+                                force = 10,
+                                size = 4.5) +
+                xlim(-0.1, 0.2) +
+                scale_colour_manual(values = sample.colors) +
+                theme_classic() +
+                theme(axis.text = element_text(size = 12),
+                      axis.title = element_text(size = 14)) +
+                labs(x='Mean Log2 FC', 
+                     y='-Log10(p-value)',
+                     title = substr(cond, 3, nchar(cond)))
+})
+pdf(paste0(path2figures, '/vulcano_plots_tfa.pdf'),
+    width = 20, height = 8)
+gridExtra::grid.arrange(grobs=vulcano.tfa, ncol=3)
+dev.off()
+
+
+
+
+
+##---------------------------------------------
+## Plotting regulons
+ntop <- 2000
+regulon <- 'STAT2'
+
+
+plot_rewiring <- function(regulon='STAT2', ntop=2000){
+        pdf(file = paste0(path2figures, '/regulon_rewiring_', regulon, '.pdf'),
+            width = 9, height = 7.5)
+        par(mfrow=c(2,3))
+        for ( sample in conditions){
+                net.df <- networks.list[sample][[1]] %>%
+                        arrange(desc(abs(coef_abs))) %>%
+                        head(ntop) %>%
+                        filter(source==regulon)
+                edges <- select(net.df,
+                                source,
+                                target,
+                                coef_abs,
+                                coef_mean) 
+                edges <- rename(edges, 
+                                from=source,
+                                to=target)
+                nodes <- data.frame(name=unique(c(edges$from,
+                                                  edges$to)))
+                g <- graph_from_data_frame(edges, 
+                                           directed = TRUE, 
+                                           vertices = nodes)
+                ## color label assignation
+                nodes.label.color <- ifelse(V(g)$name == regulon, 'red', 'black')
+                ## color edge assignation
+                edges.color <- ifelse(E(g)$coef_mean>0, 'chartreuse3', 'orange3')
+                
+                ## label size
+                nodes.label.size <- ifelse(V(g)$name == regulon, 1.5, 1)
+                plot(g,
+                     ## vertex settings
+                     vertex.size=0,
+                     vertex.label.color=nodes.label.color,
+                     vertex.label.dist=2,
+                     vertex.label.cex=nodes.label.size,
+                     vertex.shape='none',
+                     ## 
+                     edge.arrow.size=0,
+                     edge.width=(edges$coef_mean - min(edges$coef_mean, na.rm = TRUE))*10,
+                     edge.color=edges.color,
+                     
+                     ## general settings
+                     main = substr(sample, 3, nchar(sample)),
+                )  
+        } 
+        dev.off()
+}
+
+
+DotPlot(seurat, features = top30.targets) +
+        scale_color_viridis() +
+        labs(x='', y='')
+
+tfs <- c('IRF2', 'IRF9', 'NFKB1', 'STAT1', 'STAT2', 'JUN', 'JUNB')
+for ( tf in tfs ){
+        plot_rewiring(regulon = tf)
+}
+
+
+
+##---------------------------------------------
+## Visualisation of dot plots
+plot_dotplots <- function(regulon='STAT2', ntop=2000, genesByCondition=5){
+        top.targets <- lapply(conditions, function(cond){
+                top.targets <- networks.list[cond][[1]] %>%
+                        arrange(desc(abs(coef_abs))) %>%
+                        head(ntop) %>%
+                        filter(source==regulon) %>%
+                        head(genesByCondition) %>%
+                        pull(target) %>%
+                        unique()
+        }) %>% unlist() %>% unique()
+        
+        
+        DotPlot(seurat, features = c(paste0('sct_', top.targets)),
+                assay = 'SCT') +
+                scale_color_viridis() +
+                labs(x='', y='', title = regulon)
+}
+
+dot.plots <- lapply(c('IRF9', 'STAT1', 'NFKB1'), 
+                    function(tf) {plot_dotplots(regulon=tf, genesByCondition = 3)})
+gridExtra::grid.arrange(grobs=dot.plots, ncol=1)
+dot.plots[1]
 
 ##---------------------------------------------
 ## Visualization of TFA activities
@@ -186,7 +336,7 @@ column_ann <- columnAnnotation(
         col = list(treatment=sample.colors[unique(seurat$orig.ident)])
 )
 Heatmap(
-        auc.mtx[top10$gene,], 
+        auc.mtx[top$gene,], 
         top_annotation = column_ann, 
         row_dend_reorder = NA, 
         column_dend_reorder = TRUE,
