@@ -165,7 +165,8 @@ saveRDS(auc.df,
 ##-----------------------------------------------
 ## Adding information to the seurat object
 all(colnames(seurat) == rownames(auc.df) )
-seurat@meta.data <- cbind(seurat@meta.data, auc.df) 
+## [1] TRUE
+#seurat@meta.data <- cbind(seurat@meta.data, auc.df) 
 
 
 
@@ -174,11 +175,19 @@ seurat@meta.data <- cbind(seurat@meta.data, auc.df)
 tfa <- CreateAssayObject(data = auc.mtx, min.cells = 0, min.features = 0)
 seurat[["regulon_"]] <- tfa
 Idents(seurat) <- seurat$orig.ident
-diff.tfa <- FindAllMarkers(seurat, 
-                        assay = 'regulon_', 
-                        group.by = 'orig.ident', 
-                        logfc.threshold = 0, 
-                        min.pct = 0)
+diff.tfa.list <- lapply(conditions, 
+                   function(cond){
+                           df <- FindMarkers(seurat,
+                                       ident.1 = cond,
+                                       ident.2 = '7_3h_-IFN_polyC',
+                                       logfc.threshold = 0,
+                                       min.pct = 0,
+                                       assay = 'regulon_')
+                           df$'cluster' <- cond
+                           return(df)
+                   })
+diff.tfa.list <- diff.tfa.list[conditions != '7_3h_-IFN_polyC']
+diff.tfa <- do.call(rbind, diff.tfa.list)
 diff.tfa %>%
         group_by(cluster) %>%
         top_n(n = 5, wt = avg_log2FC) -> top
@@ -187,11 +196,36 @@ diff.tfa %>%
 
 ##---------------------------------------------
 ## Visualisation of DEA by sample
+diff.tfa$'gene' <- gsub('.*\\.', '', rownames(diff.tfa))
+## adding regulon size
 diff.tfa$'regulon_size' <- plyr::mapvalues(diff.tfa$gene,
                                            from = reg.sizes.df$tf,
                                            to = reg.sizes.df$regulon_size)
 diff.tfa$regulon_size <- as.numeric(diff.tfa$regulon_size)
-vulcano.tfa <- lapply(conditions, function(cond){
+## adding mean expression
+gene.features <- unique(diff.tfa$gene)
+seu <- NormalizeData(seurat) %>%
+        ScaleData()
+mean.gex.list <- lapply(conditions,
+                        function(cond){
+                                mtx <- FetchData(subset(seu,
+                                                        orig.ident == cond),
+                                                 vars = gene.features,
+                                                 assay = 'RNA')
+                                mean <- apply(mtx, 2, mean) 
+                                df <- data.frame(gene=names(mean),
+                                                 mean=mean,
+                                                 condition=cond)
+                                return(df)
+                                
+                        })
+mean.gex <- do.call(rbind, mean.gex.list)
+diff.tfa$'mean' <- plyr::mapvalues(rownames(diff.tfa), 
+                                 from = rownames(mean.gex),
+                                 to = mean.gex$mean)
+diff.tfa$mean <- as.numeric(diff.tfa$mean)
+vulcano.tfa <- lapply(conditions[conditions != '7_3h_-IFN_polyC'], 
+                      function(cond){
         df <- filter(diff.tfa, cluster == cond)
         df <- arrange(df, desc(avg_log2FC))
         top <- head(df)$gene
@@ -203,7 +237,7 @@ vulcano.tfa <- lapply(conditions, function(cond){
                                     gene, ''))
         df %>%
                 ggplot(aes(x=avg_log2FC, y=-log10(p_val),
-                           colour=cluster,
+                           colour=mean,
                            label=label,
                            size=regulon_size)) +
                 geom_point() +
@@ -219,7 +253,7 @@ vulcano.tfa <- lapply(conditions, function(cond){
                                 force = 10,
                                 size = 4.5) +
                 xlim(-0.1, 0.2) +
-                scale_colour_manual(values = sample.colors) +
+                scale_colour_viridis() +
                 theme_classic() +
                 theme(axis.text = element_text(size = 12),
                       axis.title = element_text(size = 14)) +
@@ -229,7 +263,7 @@ vulcano.tfa <- lapply(conditions, function(cond){
 })
 pdf(paste0(path2figures, '/vulcano_plots_tfa.pdf'),
     width = 20, height = 8)
-gridExtra::grid.arrange(grobs=vulcano.tfa, ncol=3)
+gridExtra::grid.arrange(grobs=vulcano.tfa, ncol=2)
 dev.off()
 
 
